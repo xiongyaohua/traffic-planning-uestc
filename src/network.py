@@ -1,3 +1,6 @@
+import matplotlib.pyplot as plt
+import networkx as nx
+
 Network = dict
 
 network = {
@@ -40,14 +43,27 @@ speed_map = {
 Path = list
 
 def dijkstra(network, attr_map, origin, destination) -> Path:
-    pass
+    import heapq
+    queue = [(0, origin, [])]
+    seen = set()
+    while queue:
+        (cost, node, path) = heapq.heappop(queue)
+        if node in seen:
+            continue
+        path = path + [node]
+        if node == destination:
+            return path
+        seen.add(node)
+        for neighbor in network.get(node, []):
+            if neighbor:
+                heapq.heappush(queue, (cost + attr_map.get((node, neighbor), float('inf')), neighbor, path))
+    return []
 
 def assign(network, cost_function_map, od_pairs) -> AttributeMap:
     flow_map = {}
     for od_pair in od_pairs:
         new_flow_map = single_od_assign(network, cost_function_map, od_pair, flow_map)
         flow_map = flow_map_combine(flow_map, new_flow_map)
-
     return flow_map
 
 def single_od_assign(network, cost_function_map, od_pair, base_flow_map) -> AttributeMap:
@@ -63,44 +79,67 @@ def single_od_assign(network, cost_function_map, od_pair, base_flow_map) -> Attr
         flow_map = flow_map_scale(flow_map, 0.9)
         new_flow_map = flow_loading(network, shortest_path, flow * 0.1)
         flow_map = flow_map_combine(flow_map, new_flow_map)
+    return flow_map
 
 def flow_map_combine(map1, map2):
-    map = {}
-    for key in map1.keys():
-        map[key] = map1[key] + map2[key]
-    return map
+    combined_map = map1.copy()
+    for key in map2:
+        if key in combined_map:
+            combined_map[key] += map2[key]
+        else:
+            combined_map[key] = map2[key]
+    return combined_map
 
 def flow_map_scale(map1, scale):
-    map = {}
-    for key in map1.keys():
-        map[key] = map1[key] * scale
-
-    return map
+    return {key: value * scale for key, value in map1.items()}
 
 def update_cost(cost_function_map, flow_map):
-    map = {}
-    for key in cost_function_map.keys[]:
+    cost_map = {}
+    for key in cost_function_map:
         cost_function = cost_function_map[key]
-        flow = flow_map[key]
+        flow = flow_map.get(key, 0)
         cost = cost_function(flow)
-        map[key] = cost
-
-    return map
+        cost_map[key] = cost
+    return cost_map
 
 def flow_loading(network, path, flow):
-    map = {}
+    flow_map = {}
     links = set(zip(path[:-1], path[1:]))
     for link in network_links(network):
-        if link in links:
-            map[link] = flow
-        else:
-            map[link] = 0
-
-    return map
+        flow_map[link] = flow if link in links else 0
+    return flow_map
 
 def network_links(network):
-    pass
+    links = []
+    for node, neighbors in network.items():
+        for neighbor in neighbors:
+            if neighbor:
+                links.append((node, neighbor))
+    return links
 
+def draw_network(network, flow_map):
+    G = nx.DiGraph()
+    for node in network:
+        G.add_node(node)
+    for (node1, node2), flow in flow_map.items():
+        G.add_edge(node1, node2, weight=flow)
 
+    pos = nx.spring_layout(G)
+    edges = G.edges(data=True)
+    weights = [edge[2]['weight'] for edge in edges]
 
-    
+    nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=500, font_size=10, font_weight='bold')
+    nx.draw_networkx_edge_labels(G, pos, edge_labels={(u, v): f'{d["weight"]:.2f}' for u, v, d in edges})
+    nx.draw(G, pos, edges=edges, edge_color=weights, width=2.0, edge_cmap=plt.cm.Blues)
+
+    plt.show()
+
+# od_pairs = [("A", "C", 10)]
+# cost_function_map = {
+#     ("A", "B"): lambda flow: 10 + flow,
+#     ("A", "C"): lambda flow: 5 + 2 * flow,
+#     ("B", "C"): lambda flow: 7 + 3 * flow,
+# }
+
+# flow_map = assign(network, cost_function_map, od_pairs)
+# draw_network(network, flow_map)
